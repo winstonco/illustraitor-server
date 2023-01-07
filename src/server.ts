@@ -2,7 +2,7 @@
 import express, { Express, Request, Response } from 'express';
 import { createServer } from 'http';
 
-import { PORT } from './env-vars';
+import { ORIGIN, PORT } from './env-vars';
 import {
   ClientToServerEvents,
   InterServerEvents,
@@ -20,7 +20,7 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`[server]: Server is running at http://localhost:${PORT}`);
+  console.log(`[server]: Server is running at ${ORIGIN}`);
 });
 
 // Pass new Server object
@@ -32,7 +32,7 @@ initSocket(
     SocketData
   >(httpServer, {
     cors: {
-      origin: 'http://localhost:5173',
+      origin: ORIGIN,
     },
   })
 );
