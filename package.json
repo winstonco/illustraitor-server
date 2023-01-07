@@ -4,7 +4,7 @@
   "description": "Server for Sham Illustrator game",
   "main": "server.js",
   "scripts": {
-    "build": "npm install typescript & npx tsc",
+    "build": "npm install typescript && npx tsc",
     "start": "node dist/server.js",
     "dev": "concurrently \"npx tsc --watch\" \"nodemon -q dist/server.js\""
   },
