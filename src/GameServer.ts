@@ -84,13 +84,6 @@ export class GameServer extends Server<
       this.to(lobbyName).except(imposter).emit('prompt', prompt);
       console.log('Prompt sent');
       // All players take a turn
-      // ordered.forEach(async (playerId) => {
-      //   const currentPlayer: GameSocket | undefined =
-      //     this.of('/').sockets.get(playerId);
-      //   if (currentPlayer !== undefined) {
-      //     await this.playTurn(currentPlayer, turnTime);
-      //   }
-      // });
       for (let i = 0; i < ordered.length; i++) {
         const currentPlayer: GameSocket | undefined = this.of('/').sockets.get(
           ordered[i]
