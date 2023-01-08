@@ -1,112 +1,147 @@
 import { Server, Socket } from 'socket.io';
-import { DefaultEventsMap, EventsMap } from 'socket.io/dist/typed-events';
 
-import { Lobby } from './Lobby';
-import { DrawEvents, GameEvents } from './types/GameEvents';
+import {
+  ClientToServerEvents,
+  GameSocket,
+  InterServerEvents,
+  ServerToClientEvents,
+  SocketData,
+} from './types/SocketIOEvents.js';
+import Lobby from './Lobby.js';
+import { DrawEvents } from './types/EventNames.js';
+import genPrompt from './utils/genPrompt.js';
+import Timer from './utils/Timer.js';
+import { settings } from './settings.js';
 
-export class GameServer<
-  ListenEvents extends EventsMap = DefaultEventsMap,
-  EmitEvents extends EventsMap = ListenEvents,
-  ServerSideEvents extends EventsMap = DefaultEventsMap,
-  SocketData = any
-> extends Server {
+export class GameServer extends Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+> {
   public lobbies: Lobby[];
   public count: number;
-
-  // Map of sockets in a lobby to the index of the lobby
-  private _savedSockets: Map<Socket, number>;
 
   constructor(...args: any[]) {
     super(...args);
     this.lobbies = new Array<Lobby>();
     this.count = 0;
-
-    this._savedSockets = new Map<Socket, number>();
   }
 
-  createLobby(name: string, size?: number): boolean {
-    if (this.lobbies.find((lobby) => lobby.name === name) === undefined) {
-      this.lobbies.push(new Lobby(name, size));
+  createLobby(lobbyName: string, size?: number): boolean {
+    if (this.getLobby(lobbyName) === undefined) {
+      this.lobbies.push(new Lobby(lobbyName, size));
       return true;
     }
     return false;
   }
 
-  joinLobby(name: string, socket: Socket): boolean {
-    let lobby = this.lobbies.find((lobby) => lobby.name === name);
+  joinLobby(lobbyName: string, socket: GameSocket): boolean {
+    const lobby = this.getLobby(lobbyName);
     if (!this.isInALobby(socket) && lobby?.addPlayer(socket.id)) {
-      this._savedSockets.set(socket, this.lobbies.indexOf(lobby));
-      socket.join(name);
+      socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
+      socket.data.canDraw = settings.startCanDraw;
+      socket.join(lobbyName);
       return true;
     }
     return false;
   }
 
-  leaveLobby(name: string, socket: Socket): boolean {
-    if (
-      this.lobbies.find((lobby) => lobby.name === name)?.removePlayer(socket.id)
-    ) {
-      this._savedSockets.delete(socket);
-      socket.leave(name);
+  leaveLobby(lobbyName: string, socket: GameSocket): boolean {
+    if (this.getLobby(lobbyName)?.removePlayer(socket.id)) {
+      socket.data.lobbyIndex = undefined;
+      socket.leave(lobbyName);
       return true;
     }
     return false;
   }
 
-  startGame(name: string): void {
-    this.readyCheck(3000, name);
+  startGame(lobbyName: string, turnTime: number = settings.turnLength): void {
+    // Lobby must be defined
+    const lobby: Lobby | undefined = this.getLobby(lobbyName);
+    if (lobby !== undefined) {
+      // All players have 3 seconds to show connection
+      this.readyCheck(lobbyName, 3000);
+      this.to(lobbyName).emit('startGame');
+
+      // While playing:
+      // Generate a prompt
+      let prompt: string = genPrompt();
+      // Randomly select an imposter artist
+      let imposter: string = lobby.pickOne();
+      this.to(lobbyName).except(imposter).emit('role', 'real');
+      this.to(imposter).emit('role', 'imposter');
+      // Randomly generate turn order
+      let ordered: string[] = lobby.genOrdered();
+      // Send prompt
+      this.to(lobbyName).except(imposter).emit('prompt', prompt);
+      // All players take a turn
+      ordered.forEach(async (playerId) => {
+        const currentPlayer: GameSocket | undefined =
+          this.of('/').sockets.get(playerId);
+        if (currentPlayer !== undefined) {
+          await this.playTurn(currentPlayer, turnTime);
+        }
+      });
+    }
   }
 
-  readyCheck(delay: number, name: string): void {
-    this.to(name)
+  private async playTurn(player: GameSocket, turnTime: number): Promise<void> {
+    player.data.canDraw = true;
+    this.to(player.id).emit('startTurn');
+    await Timer.wait(turnTime);
+    player.data.canDraw = false;
+    this.to(player.id).emit('endTurn');
+    // Next turn
+  }
+
+  readyCheck(lobbyName: string, delay: number): void {
+    this.to(lobbyName)
       .timeout(delay)
-      .emit('ready', (err: Error, responses: 'ok') => {
+      .emit('readyCheck', (err: Error, responses: 'ok') => {
         if (err) {
-          console.error('Error: Some players failed the ready check');
+          console.error(`Some players failed the ready check`);
         } else {
-          console.log('All players are ready');
+          console.log(responses);
+          console.log(`All players are ready!`);
         }
       });
   }
 
-  updateDrawEvents(socket: Socket): void {
+  drop(socket: GameSocket): void {
+    // Handle disconnects
+    const lobbyIndex = socket.data.lobbyIndex;
+    if (lobbyIndex !== undefined) {
+      const lobbyName = this.lobbies[lobbyIndex];
+      this.leaveLobby(lobbyName.name, socket);
+    }
+  }
+
+  updateDrawEvents(socket: GameSocket): void {
     DrawEvents.forEach((ev: DrawEvents) => {
       socket.removeAllListeners(ev);
-      socket.on(ev, this.reEmitListener(ev, socket));
+      socket.on(ev, (...args: any[]) => {
+        if (socket.data.canDraw) {
+          this.reEmit(socket, ev, ...args);
+        }
+      });
     });
   }
 
-  private reEmitListener(
-    ev: GameEvents,
-    socket: Socket
-  ): (...args: any[]) => void {
-    const lobbyIndex = this._savedSockets.get(socket);
+  isInALobby(socket: GameSocket): boolean {
+    return socket.data.lobbyIndex !== undefined;
+  }
+
+  private reEmit(socket: Socket, ev: string, ...args: any[]): void {
+    const lobbyIndex = socket.data.lobbyIndex;
     let lobbyName = socket.id;
     if (lobbyIndex !== undefined) {
       lobbyName = this.lobbies[lobbyIndex].name;
     }
-    return (...args: any[]) => {
-      socket.to(lobbyName).emit(ev, ...args);
-    };
+    socket.to(lobbyName).emit(ev, ...args);
   }
 
-  isInALobby(socket: Socket): boolean {
-    return this._savedSockets.has(socket);
-  }
-}
-
-export class GameSocket {
-  socket: Socket;
-
-  constructor(socket: Socket) {
-    this.socket = socket;
-  }
-
-  joinLobby(): void {}
-
-  reEmit(ev: GameEvents): void {
-    this.socket.on(ev, (...args) => {
-      this.socket.broadcast.emit(ev, ...args);
-    });
+  private getLobby(lobbyName: string) {
+    return this.lobbies.find((lobby) => lobby.name === lobbyName);
   }
 }

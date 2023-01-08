@@ -9,6 +9,11 @@ export const DrawEvents = [
 
 export type DrawEvents = typeof DrawEvents[number];
 
-export const GameEvents = [...DrawEvents, 'start', 'readyCheck'] as const;
+export const ServerEvents = [
+  ...DrawEvents,
+  'startGame',
+  'readyCheck',
+  'startTurn',
+] as const;
 
-export type GameEvents = typeof GameEvents[number];
+export type ServerEvents = typeof ServerEvents[number];

@@ -1,4 +1,4 @@
-import { GameServer } from './GameServer';
+import { GameServer } from './GameServer.js';
 
 // https://stackoverflow.com/questions/23653617/socket-io-listen-events-in-separate-files-in-node-js
 export default function initSocket(io: GameServer) {
@@ -43,10 +43,14 @@ export default function initSocket(io: GameServer) {
       }
     });
 
-    // Draw events
-    // gs.reEmit('beginDrawing');
-    // gs.reEmit('drawTo');
-    // gs.reEmit('endDrawing');
-    // gs.reEmit('clearCanvas');
+    socket.on('startGame', (lobbyName) => {
+      io.startGame(lobbyName);
+    });
+
+    // Disconnect
+    socket.on('disconnecting', (reason) => {
+      console.log(`Socket ${socket.id} disconnected`);
+      io.drop(socket);
+    });
   });
 }

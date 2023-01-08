@@ -1,4 +1,6 @@
-export class Lobby {
+import RandomPicker from './utils/RandomPicker.js';
+
+export default class Lobby {
   private _sockets: string[];
   private _size: number;
   private _max: number;
@@ -40,6 +42,18 @@ export class Lobby {
 
   isFull(): boolean {
     return this._size === this._max;
+  }
+
+  pickOne(): string {
+    return RandomPicker.pickOne(this._sockets);
+  }
+
+  genOrdered(): string[] {
+    // Randomly sort and return a copy of the sockets array
+    let ordered: string[] = this._sockets.sort(() => {
+      return Math.floor(Math.random() * 3) - 1;
+    });
+    return ordered;
   }
 
   get size(): number {
