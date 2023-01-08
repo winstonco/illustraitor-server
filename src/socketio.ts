@@ -45,6 +45,7 @@ export default function initSocket(io: GameServer) {
 
     socket.on('startGame', (lobbyName) => {
       io.startGame(lobbyName);
+      // io.readyCheck(lobbyName, 3000);
     });
 
     // Disconnect

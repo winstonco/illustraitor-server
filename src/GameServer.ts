@@ -56,13 +56,19 @@ export class GameServer extends Server<
     return false;
   }
 
-  startGame(lobbyName: string, turnTime: number = settings.turnLength): void {
+  async startGame(
+    lobbyName: string,
+    turnTime: number = settings.turnLength
+  ): Promise<void> {
     // Lobby must be defined
     const lobby: Lobby | undefined = this.getLobby(lobbyName);
     if (lobby !== undefined) {
       // All players have 3 seconds to show connection
-      this.readyCheck(lobbyName, 3000);
+      if (!(await this.readyCheck(lobbyName, 3000))) {
+        // handle fail
+      }
       this.to(lobbyName).emit('startGame');
+      console.log('Game starting');
 
       // While playing:
       // Generate a prompt
@@ -71,41 +77,65 @@ export class GameServer extends Server<
       let imposter: string = lobby.pickOne();
       this.to(lobbyName).except(imposter).emit('role', 'real');
       this.to(imposter).emit('role', 'imposter');
+      console.log('Roles sent');
       // Randomly generate turn order
       let ordered: string[] = lobby.genOrdered();
       // Send prompt
       this.to(lobbyName).except(imposter).emit('prompt', prompt);
+      console.log('Prompt sent');
       // All players take a turn
-      ordered.forEach(async (playerId) => {
-        const currentPlayer: GameSocket | undefined =
-          this.of('/').sockets.get(playerId);
+      // ordered.forEach(async (playerId) => {
+      //   const currentPlayer: GameSocket | undefined =
+      //     this.of('/').sockets.get(playerId);
+      //   if (currentPlayer !== undefined) {
+      //     await this.playTurn(currentPlayer, turnTime);
+      //   }
+      // });
+      for (let i = 0; i < ordered.length; i++) {
+        const currentPlayer: GameSocket | undefined = this.of('/').sockets.get(
+          ordered[i]
+        );
         if (currentPlayer !== undefined) {
           await this.playTurn(currentPlayer, turnTime);
         }
-      });
+      }
+      if (settings.clearOnEnd) {
+        this.to(lobbyName).emit('clearCanvas');
+      }
+      console.log('Game end');
     }
   }
 
   private async playTurn(player: GameSocket, turnTime: number): Promise<void> {
-    player.data.canDraw = true;
-    this.to(player.id).emit('startTurn');
-    await Timer.wait(turnTime);
-    player.data.canDraw = false;
-    this.to(player.id).emit('endTurn');
-    // Next turn
+    return new Promise(async (res) => {
+      console.log(`It is player ${player.id}'s turn`);
+      player.data.canDraw = true;
+      this.to(player.id).emit('startTurn');
+      await Timer.wait(turnTime, () => {
+        player.data.canDraw = false;
+        this.to(player.id).emit('endTurn');
+        // Next turn
+        console.log(`Player ${player.id}'s turn ended`);
+        res();
+      });
+    });
   }
 
-  readyCheck(lobbyName: string, delay: number): void {
-    this.to(lobbyName)
-      .timeout(delay)
-      .emit('readyCheck', (err: Error, responses: 'ok') => {
-        if (err) {
-          console.error(`Some players failed the ready check`);
-        } else {
-          console.log(responses);
-          console.log(`All players are ready!`);
-        }
-      });
+  readyCheck(lobbyName: string, delay: number): Promise<boolean> {
+    return new Promise<boolean>((res, rej) => {
+      this.to(lobbyName)
+        .timeout(delay)
+        .emit('readyCheck', (err: Error | null, responses: 'ok') => {
+          if (err) {
+            console.error(`Some players failed the ready check`);
+            rej('Player(s) failed the ready check');
+          } else {
+            console.log(responses);
+            console.log(`All players are ready!`);
+            res(true);
+          }
+        });
+    });
   }
 
   drop(socket: GameSocket): void {

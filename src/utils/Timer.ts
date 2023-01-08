@@ -18,9 +18,10 @@ export default class Timer {
     }
   }
 
-  static wait(time: number = 1): Promise<void> {
+  static wait(time: number = 1, fn: Function = () => {}): Promise<void> {
     return new Promise((resolve) => {
       setTimeout(() => {
+        fn();
         resolve();
       }, time * 1000);
     });
