@@ -1,4 +1,4 @@
-import RandomPicker from './RandomPicker';
+import RandomPicker from './RandomPicker.js';
 
 export default function genPrompt(): string {
   const subject: string = RandomPicker.pickOne(subjects);
