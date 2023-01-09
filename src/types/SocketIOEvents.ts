@@ -9,16 +9,23 @@ interface ServerToClientEvents extends IGlobalGameEvents {
   readyCheck: (callback: (err: Error | null, responses: 'ok') => void) => void;
   role: (role: GameRole) => void;
   prompt: (prompt: string) => void;
-  startTurn: () => void;
+  startTurn: (turnTime: number) => void;
   endTurn: () => void;
   startGame: () => void;
 }
 
 interface ClientToServerEvents extends IGlobalGameEvents {
   hello: () => void;
-  createLobby: (lobbyName: string, lobbySize?: number) => void;
-  joinLobby: (lobbyName: string) => void;
-  leaveLobby: (lobbyName: string) => void;
+  createLobby: (
+    lobbyName: string,
+    callback: (response: 'ok' | 'fail') => void,
+    lobbySize?: number
+  ) => void;
+  joinLobby: (
+    lobbyName: string,
+    callback: (response: 'ok' | 'fail') => void
+  ) => void;
+  leaveLobby: (callback: (response: 'ok' | 'fail') => void) => void;
   startGame: (lobbyName: string) => void;
 }
 
@@ -27,6 +34,7 @@ interface InterServerEvents {
 }
 
 interface SocketData {
+  lobbyName: string;
   lobbyIndex: number;
   canDraw: boolean;
   name: string;

@@ -1,6 +1,6 @@
 export default interface IDraw {
   beginDrawing: (startX: number, startY: number) => void;
-  drawTo: (toX: number, toY: number, width?: number) => void;
+  drawTo: (toX: number, toY: number, width?: number, color?: string) => void;
   endDrawing: () => void;
   clearCanvas: () => void;
 }

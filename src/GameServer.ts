@@ -41,19 +41,22 @@ export class GameServer extends Server<
     if (!this.isInALobby(socket) && lobby?.addPlayer(socket.id)) {
       socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
       socket.data.canDraw = settings.startCanDraw;
+      socket.data.lobbyName = lobbyName;
       socket.join(lobbyName);
       return true;
     }
     return false;
   }
 
-  leaveLobby(lobbyName: string, socket: GameSocket): boolean {
-    if (this.getLobby(lobbyName)?.removePlayer(socket.id)) {
+  leaveLobby(socket: GameSocket): boolean {
+    if (this.isInALobby(socket)) {
+      // in a lobby
+      this.lobbies[socket.data.lobbyIndex!].removePlayer(socket.id);
+      socket.leave(this.lobbies[socket.data.lobbyIndex!].name);
       socket.data.lobbyIndex = undefined;
-      socket.leave(lobbyName);
-      return true;
+      socket.data.lobbyName = undefined;
     }
-    return false;
+    return true;
   }
 
   async startGame(
@@ -103,7 +106,7 @@ export class GameServer extends Server<
     return new Promise(async (res) => {
       console.log(`It is player ${player.id}'s turn`);
       player.data.canDraw = true;
-      this.to(player.id).emit('startTurn');
+      this.to(player.id).emit('startTurn', turnTime);
       await Timer.wait(turnTime, () => {
         player.data.canDraw = false;
         this.to(player.id).emit('endTurn');
@@ -132,12 +135,7 @@ export class GameServer extends Server<
   }
 
   drop(socket: GameSocket): void {
-    // Handle disconnects
-    const lobbyIndex = socket.data.lobbyIndex;
-    if (lobbyIndex !== undefined) {
-      const lobbyName = this.lobbies[lobbyIndex];
-      this.leaveLobby(lobbyName.name, socket);
-    }
+    this.leaveLobby(socket);
   }
 
   updateDrawEvents(socket: GameSocket): void {
