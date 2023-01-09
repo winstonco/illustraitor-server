@@ -13,7 +13,7 @@ export default function initSocket(io: GameServer) {
         size?: number
       ) => {
         console.log(`Creating lobby ${lobbyName}`);
-        if (io.createLobby(lobbyName, size)) {
+        if (io.createLobby(lobbyName, socket, size)) {
           console.log(`Lobby ${lobbyName} created`);
           callback('ok');
         } else {

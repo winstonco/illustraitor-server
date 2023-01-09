@@ -28,17 +28,20 @@ export class GameServer extends Server<
     this.count = 0;
   }
 
-  createLobby(lobbyName: string, size?: number): boolean {
+  createLobby(lobbyName: string, socket: GameSocket, size?: number): boolean {
     if (this.getLobby(lobbyName) === undefined) {
       this.lobbies.push(new Lobby(lobbyName, size));
+      this.joinLobby(lobbyName, socket);
       return true;
     }
     return false;
   }
 
   joinLobby(lobbyName: string, socket: GameSocket): boolean {
+    // Leaves any lobby they were in first
+    this.leaveLobby(socket);
     const lobby = this.getLobby(lobbyName);
-    if (!this.isInALobby(socket) && lobby?.addPlayer(socket.id)) {
+    if (lobby?.addPlayer(socket.id)) {
       socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
       socket.data.canDraw = settings.startCanDraw;
       socket.data.lobbyName = lobbyName;
