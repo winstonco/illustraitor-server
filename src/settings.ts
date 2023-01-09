@@ -1,5 +1,5 @@
 export const settings = {
-  startCanDraw: true,
+  outOfGameDrawEnabled: true,
   turnLength: 10,
   clearOnEnd: true,
 };

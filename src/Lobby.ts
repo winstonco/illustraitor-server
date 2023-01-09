@@ -44,6 +44,10 @@ export default class Lobby {
     return this._size === this._max;
   }
 
+  isEmpty(): boolean {
+    return this._size === 0;
+  }
+
   pickOne(): string {
     return RandomPicker.pickOne(this._sockets);
   }
@@ -54,6 +58,10 @@ export default class Lobby {
       return Math.floor(Math.random() * 3) - 1;
     });
     return ordered;
+  }
+
+  get players(): string[] {
+    return this._sockets;
   }
 
   get size(): number {

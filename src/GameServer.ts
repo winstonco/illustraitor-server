@@ -12,6 +12,7 @@ import { DrawEvents } from './types/EventNames.js';
 import genPrompt from './utils/genPrompt.js';
 import Timer from './utils/Timer.js';
 import { settings } from './settings.js';
+import { DrawEventArgs } from './types/DrawEvents.js';
 
 export class GameServer extends Server<
   ClientToServerEvents,
@@ -20,18 +21,25 @@ export class GameServer extends Server<
   SocketData
 > {
   public lobbies: Lobby[];
-  public count: number;
 
   constructor(...args: any[]) {
     super(...args);
     this.lobbies = new Array<Lobby>();
-    this.count = 0;
+  }
+
+  removeLobby(lobby: Lobby): boolean {
+    if (this.lobbies.includes(lobby)) {
+      this.lobbies = this.lobbies.filter((l) => {
+        return l !== lobby;
+      });
+      return true;
+    }
+    return false;
   }
 
   createLobby(lobbyName: string, socket: GameSocket, size?: number): boolean {
     if (this.getLobby(lobbyName) === undefined) {
       this.lobbies.push(new Lobby(lobbyName, size));
-      this.joinLobby(lobbyName, socket);
       return true;
     }
     return false;
@@ -39,28 +47,56 @@ export class GameServer extends Server<
 
   joinLobby(lobbyName: string, socket: GameSocket): boolean {
     // Leaves any lobby they were in first
-    this.leaveLobby(socket);
     const lobby = this.getLobby(lobbyName);
-    if (lobby?.addPlayer(socket.id)) {
-      socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
-      socket.data.canDraw = settings.startCanDraw;
-      socket.data.lobbyName = lobbyName;
-      socket.join(lobbyName);
+    if (lobby) {
+      if (this.isInALobby(socket)) {
+        this.leaveLobby(socket.data.lobbyName!, socket);
+      }
+      if (lobby.addPlayer(socket.id)) {
+        socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
+        socket.data.canDraw = settings.outOfGameDrawEnabled;
+        socket.data.lobbyName = lobbyName;
+        socket.join(lobbyName);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  leaveLobby(lobbyName: string, socket: GameSocket): boolean {
+    const lobby = this.getLobby(lobbyName);
+    if (lobby?.contains(socket.id)) {
+      lobby.removePlayer(socket.id);
+      socket.leave(lobby.name);
+      if (lobby.isEmpty()) {
+        this.removeLobby(lobby);
+      }
+      socket.data.lobbyIndex = undefined;
+      socket.data.lobbyName = undefined;
       return true;
     }
     return false;
   }
 
-  leaveLobby(socket: GameSocket): boolean {
+  // UNUSED
+  leaveAll(socket: GameSocket): boolean {
     if (this.isInALobby(socket)) {
       // in a lobby
-      this.lobbies[socket.data.lobbyIndex!].removePlayer(socket.id);
+      const lobby: Lobby = this.lobbies[socket.data.lobbyIndex!];
+      lobby.removePlayer(socket.id);
       socket.leave(this.lobbies[socket.data.lobbyIndex!].name);
+      if (lobby.isEmpty()) {
+        this.removeLobby(lobby);
+      }
       socket.data.lobbyIndex = undefined;
       socket.data.lobbyName = undefined;
     }
     return true;
   }
+
+  private preGame(lobby: Lobby) {}
+
+  private postGame(lobby: Lobby) {}
 
   async startGame(
     lobbyName: string,
@@ -69,6 +105,7 @@ export class GameServer extends Server<
     // Lobby must be defined
     const lobby: Lobby | undefined = this.getLobby(lobbyName);
     if (lobby !== undefined) {
+      this.preGame(lobby);
       // All players have 3 seconds to show connection
       if (!(await this.readyCheck(lobbyName, 3000))) {
         // handle fail
@@ -102,6 +139,7 @@ export class GameServer extends Server<
         this.to(lobbyName).emit('clearCanvas');
       }
       console.log('Game end');
+      this.postGame(lobby);
     }
   }
 
@@ -137,16 +175,17 @@ export class GameServer extends Server<
     });
   }
 
-  drop(socket: GameSocket): void {
-    this.leaveLobby(socket);
+  dropSocket(socket: GameSocket): void {
+    this.leaveAll(socket);
   }
 
   updateDrawEvents(socket: GameSocket): void {
     DrawEvents.forEach((ev: DrawEvents) => {
       socket.removeAllListeners(ev);
-      socket.on(ev, (...args: any[]) => {
+      socket.on(ev, (...args: DrawEventArgs) => {
         if (socket.data.canDraw) {
-          this.reEmit(socket, ev, ...args);
+          let lobbyName = socket.data.lobbyName ?? socket.id;
+          socket.to(lobbyName).emit(ev, ...args);
         }
       });
     });
@@ -154,15 +193,6 @@ export class GameServer extends Server<
 
   isInALobby(socket: GameSocket): boolean {
     return socket.data.lobbyIndex !== undefined;
-  }
-
-  private reEmit(socket: Socket, ev: string, ...args: any[]): void {
-    const lobbyIndex = socket.data.lobbyIndex;
-    let lobbyName = socket.id;
-    if (lobbyIndex !== undefined) {
-      lobbyName = this.lobbies[lobbyIndex].name;
-    }
-    socket.to(lobbyName).emit(ev, ...args);
   }
 
   private getLobby(lobbyName: string) {
