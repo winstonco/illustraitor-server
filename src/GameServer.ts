@@ -135,6 +135,10 @@ export class GameServer extends Server<
     let ordered: GameSocket[] = lobby.genOrdered();
     // Send prompt
     this.to(lobbyName).except(imposter).emit('prompt', prompt);
+    this.to(imposter).emit(
+      'prompt',
+      "You can't see the prompt. Try to blend in!"
+    );
     console.log('Prompt sent');
     // All players take a turn
     for (let i = 0; i < ordered.length; i++) {
