@@ -1,5 +1,5 @@
 export default class RandomPicker {
-  static pickOne(arr: any[]): any {
-    return arr[Math.round(Math.random() * arr.length)];
+  static pickOne<T>(arr: T[]): T {
+    return arr[Math.floor(Math.random() * arr.length)];
   }
 }

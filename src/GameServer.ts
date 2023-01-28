@@ -1,4 +1,4 @@
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 
 import {
   ClientToServerEvents,
@@ -40,6 +40,7 @@ export class GameServer extends Server<
   createLobby(lobbyName: string, socket: GameSocket, size?: number): boolean {
     if (this.getLobby(lobbyName) === undefined) {
       this.lobbies.push(new Lobby(lobbyName, size));
+      this.joinLobby(lobbyName, socket);
       return true;
     }
     return false;
@@ -52,9 +53,9 @@ export class GameServer extends Server<
       if (this.isInALobby(socket)) {
         this.leaveLobby(socket.data.lobbyName!, socket);
       }
-      if (lobby.addPlayer(socket.id)) {
+      if (lobby.addPlayer(socket)) {
+        this.outOfGameSetup(socket);
         socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
-        socket.data.canDraw = settings.outOfGameDrawEnabled;
         socket.data.lobbyName = lobbyName;
         socket.join(lobbyName);
         return true;
@@ -65,25 +66,25 @@ export class GameServer extends Server<
 
   leaveLobby(lobbyName: string, socket: GameSocket): boolean {
     const lobby = this.getLobby(lobbyName);
-    if (lobby?.contains(socket.id)) {
-      lobby.removePlayer(socket.id);
+    if (lobby?.contains(socket)) {
+      lobby.removePlayer(socket);
       socket.leave(lobby.name);
       if (lobby.isEmpty()) {
         this.removeLobby(lobby);
       }
       socket.data.lobbyIndex = undefined;
       socket.data.lobbyName = undefined;
+      this.updateDrawEvents(socket);
       return true;
     }
     return false;
   }
 
-  // UNUSED
   leaveAll(socket: GameSocket): boolean {
     if (this.isInALobby(socket)) {
       // in a lobby
       const lobby: Lobby = this.lobbies[socket.data.lobbyIndex!];
-      lobby.removePlayer(socket.id);
+      lobby.removePlayer(socket);
       socket.leave(this.lobbies[socket.data.lobbyIndex!].name);
       if (lobby.isEmpty()) {
         this.removeLobby(lobby);
@@ -94,9 +95,16 @@ export class GameServer extends Server<
     return true;
   }
 
+  private outOfGameSetup(socket: GameSocket) {
+    this.updateDrawEvents(socket);
+    socket.data.canDraw = settings.outOfGameDrawEnabled;
+  }
+
   private preGame(lobby: Lobby) {}
 
-  private postGame(lobby: Lobby) {}
+  private postGame(lobby: Lobby) {
+    lobby.sockets.forEach((socket) => this.outOfGameSetup(socket));
+  }
 
   async startGame(
     lobbyName: string,
@@ -104,43 +112,41 @@ export class GameServer extends Server<
   ): Promise<void> {
     // Lobby must be defined
     const lobby: Lobby | undefined = this.getLobby(lobbyName);
-    if (lobby !== undefined) {
-      this.preGame(lobby);
-      // All players have 3 seconds to show connection
-      if (!(await this.readyCheck(lobbyName, 3000))) {
-        // handle fail
-      }
-      this.to(lobbyName).emit('startGame');
-      console.log('Game starting');
-
-      // While playing:
-      // Generate a prompt
-      let prompt: string = genPrompt();
-      // Randomly select an imposter artist
-      let imposter: string = lobby.pickOne();
-      this.to(lobbyName).except(imposter).emit('role', 'real');
-      this.to(imposter).emit('role', 'imposter');
-      console.log('Roles sent');
-      // Randomly generate turn order
-      let ordered: string[] = lobby.genOrdered();
-      // Send prompt
-      this.to(lobbyName).except(imposter).emit('prompt', prompt);
-      console.log('Prompt sent');
-      // All players take a turn
-      for (let i = 0; i < ordered.length; i++) {
-        const currentPlayer: GameSocket | undefined = this.of('/').sockets.get(
-          ordered[i]
-        );
-        if (currentPlayer !== undefined) {
-          await this.playTurn(currentPlayer, turnTime);
-        }
-      }
-      if (settings.clearOnEnd) {
-        this.to(lobbyName).emit('clearCanvas');
-      }
-      console.log('Game end');
-      this.postGame(lobby);
+    if (lobby === undefined) return;
+    // Pre-game
+    this.preGame(lobby);
+    // All players have up to 3 seconds to show connection
+    if (!(await this.readyCheck(lobbyName, 3000))) {
+      // handle fail
     }
+    this.to(lobbyName).emit('startGame');
+    console.log('Game starting');
+
+    // While playing:
+    // Generate a prompt
+    const prompt: string = genPrompt();
+    console.log(prompt);
+    // Randomly select an imposter artist
+    const imposter: string = lobby.pickOne().id;
+    this.to(lobbyName).except(imposter).emit('role', 'real');
+    this.to(imposter).emit('role', 'imposter');
+    console.log('Roles sent');
+    // Randomly generate turn order
+    let ordered: GameSocket[] = lobby.genOrdered();
+    // Send prompt
+    this.to(lobbyName).except(imposter).emit('prompt', prompt);
+    console.log('Prompt sent');
+    // All players take a turn
+    for (let i = 0; i < ordered.length; i++) {
+      const currentPlayer: GameSocket = ordered[i];
+      if (currentPlayer) await this.playTurn(currentPlayer, turnTime);
+    }
+    if (settings.clearOnEnd) {
+      this.to(lobbyName).emit('clearCanvas');
+    }
+    console.log('Game end');
+    // Post-game
+    this.postGame(lobby);
   }
 
   private async playTurn(player: GameSocket, turnTime: number): Promise<void> {

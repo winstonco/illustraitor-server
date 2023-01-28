@@ -8,4 +8,9 @@ export default interface IDraw {
 export type DrawEventArgs =
   | []
   | [startX: number, startY: number]
-  | [toX: number, toY: number, width?: number | undefined];
+  | [
+      toX: number,
+      toY: number,
+      width?: number | undefined,
+      color?: string | undefined
+    ];

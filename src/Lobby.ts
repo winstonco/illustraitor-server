@@ -1,7 +1,8 @@
+import { GameSocket } from './types/SocketIOEvents.js';
 import RandomPicker from './utils/RandomPicker.js';
 
 export default class Lobby {
-  private _sockets: string[];
+  private _sockets: GameSocket[];
   private _size: number;
   private _max: number;
   private _name: string;
@@ -13,19 +14,19 @@ export default class Lobby {
     this._max = max_size;
   }
 
-  addPlayer(socket_id: string): boolean {
-    if (!this.isFull() && !this.contains(socket_id)) {
-      this._sockets.push(socket_id);
+  addPlayer(socket: GameSocket): boolean {
+    if (!this.isFull() && !this.contains(socket)) {
+      this._sockets.push(socket);
       this._size++;
       return true;
     }
     return false;
   }
 
-  removePlayer(socket_id: string): boolean {
-    if (this.contains(socket_id)) {
-      this._sockets = this._sockets.filter((s) => {
-        if (s !== socket_id) {
+  removePlayer(socket: GameSocket): boolean {
+    if (this.contains(socket)) {
+      this._sockets = this._sockets.filter((_socket) => {
+        if (_socket.id !== socket.id) {
           return true;
         }
         this._size--;
@@ -36,8 +37,8 @@ export default class Lobby {
     return false;
   }
 
-  contains(socket_id: string): boolean {
-    return this._sockets.includes(socket_id);
+  contains(socket: GameSocket): boolean {
+    return this._sockets.some((_socket) => _socket.id === socket.id);
   }
 
   isFull(): boolean {
@@ -48,20 +49,24 @@ export default class Lobby {
     return this._size === 0;
   }
 
-  pickOne(): string {
+  pickOne(): GameSocket {
     return RandomPicker.pickOne(this._sockets);
   }
 
-  genOrdered(): string[] {
+  genOrdered(): GameSocket[] {
     // Randomly sort and return a copy of the sockets array
-    let ordered: string[] = this._sockets.sort(() => {
+    let ordered: GameSocket[] = this._sockets.sort(() => {
       return Math.floor(Math.random() * 3) - 1;
     });
     return ordered;
   }
 
-  get players(): string[] {
+  get sockets(): GameSocket[] {
     return this._sockets;
+  }
+
+  get playerIds(): string[] {
+    return this._sockets.map((gs) => gs.id);
   }
 
   get size(): number {
@@ -70,5 +75,9 @@ export default class Lobby {
 
   get name(): string {
     return this._name;
+  }
+
+  get host(): GameSocket {
+    return this._sockets[0] ?? null;
   }
 }
