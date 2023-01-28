@@ -84,7 +84,7 @@ export class GameServer extends Server<
     if (this.isInALobby(socket)) {
       // in a lobby
       const lobby: Lobby = this.lobbies[socket.data.lobbyIndex!];
-      lobby.removePlayer(socket);
+      lobby?.removePlayer(socket);
       socket.leave(this.lobbies[socket.data.lobbyIndex!].name);
       if (lobby.isEmpty()) {
         this.removeLobby(lobby);
