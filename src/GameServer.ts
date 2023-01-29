@@ -10,7 +10,6 @@ import {
 import Lobby from './Lobby.js';
 import { DrawEvents } from './types/EventNames.js';
 import genPrompt from './utils/genPrompt.js';
-import Timer from './utils/Timer.js';
 import { settings } from './settings.js';
 import { DrawEventArgs } from './types/DrawEvents.js';
 
@@ -160,15 +159,12 @@ export class GameServer extends Server<
       this.to(lobbyName).emit('clearCanvas');
     }
     // Guess who is imposter
-    const sockets = await this.in(lobbyName).fetchSockets();
+    const sockets = this.getLobby(lobbyName)?.sockets;
     const responses: string[] = [];
     await new Promise<boolean>((resolve, rej) => {
-      sockets.forEach(async (socket) => {
-        socket.emit('guessImposter', (err, res) => {
-          console.log(`err: ${err}`);
-          console.log(`res: ${res}`);
-          console.log(res);
-          responses.push(res.prop);
+      sockets?.forEach(async (socket) => {
+        socket.emit('guessImposter', settings.timeToGuess, (err, res) => {
+          responses.push(res.guess);
           if (responses.length === sockets.length) resolve(true);
         });
       });
@@ -176,6 +172,7 @@ export class GameServer extends Server<
 
     console.log(responses);
     console.log('Game end');
+    this.to(lobbyName).emit('endGame');
     // Post-game
     this.postGame(lobby);
   }
@@ -185,37 +182,37 @@ export class GameServer extends Server<
       console.log(`It is player ${player.id}'s turn`);
       player.data.canDraw = true;
       this.to(player.id).emit('startTurn', turnTime);
-      await Timer.wait(turnTime, () => {
+      setTimeout(() => {
         player.data.canDraw = false;
         this.to(player.id).emit('endTurn');
         // Next turn
         console.log(`Player ${player.id}'s turn ended`);
         res();
-      });
+      }, turnTime * 1000);
     });
   }
 
   readyCheck(lobbyName: string, delay: number): Promise<boolean> {
-    return new Promise<boolean>(async (res, rej) => {
-      const numSockets = (await this.in(lobbyName).fetchSockets()).length;
+    return new Promise<boolean>(async (resolve, reject) => {
+      const sockets = this.getLobby(lobbyName)?.sockets;
+      const numSockets = sockets?.length;
       let numResponses = 0;
 
-      this.to(lobbyName)
-        .timeout(delay)
-        .emit('readyCheck', (err: Error | null, responses: 'ok') => {
-          if (err) {
-            console.error(`A player failed the ready check`);
-            rej('Player(s) failed the ready check');
-          } else {
-            console.log(responses);
-            numResponses++;
-
-            if (numResponses === numSockets) {
-              console.log(`All players are ready!`);
-              res(true);
+      sockets?.forEach((socket) => {
+        socket
+          .timeout(delay)
+          .emit('readyCheck', (err: Error | null, res: { response: 'ok' }) => {
+            if (err) {
+              console.error(`A player failed the ready check`);
+              reject('Player(s) failed the ready check');
+            } else {
+              if (++numResponses === numSockets) {
+                console.log(`All players are ready!`);
+                resolve(true);
+              }
             }
-          }
-        });
+          });
+      });
     });
   }
 

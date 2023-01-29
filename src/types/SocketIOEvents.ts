@@ -6,15 +6,19 @@ import IGlobalGameEvents from './GlobalGameEvents.js';
 import { GameRole } from './GameRole.js';
 
 interface ServerToClientEvents extends IGlobalGameEvents {
-  readyCheck: (callback: (err: Error | null, responses: 'ok') => void) => void;
+  readyCheck: (
+    callback: (err: Error | null, res: { response: 'ok' }) => void
+  ) => void;
   role: (role: GameRole) => void;
   prompt: (prompt: string) => void;
   startTurnAll: (currentPlayerName: string) => void;
   startTurn: (turnTime: number) => void;
   endTurn: () => void;
   startGame: () => void;
+  endGame: () => void;
   guessImposter: (
-    callback: (err: Error | null, responses: { prop: string }) => void
+    guessTime: number,
+    callback: (err: Error | null, res: { guess: string }) => void
   ) => void;
 }
 
