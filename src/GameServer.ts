@@ -47,9 +47,9 @@ export class GameServer extends Server<
   }
 
   joinLobby(lobbyName: string, socket: GameSocket): boolean {
-    // Leaves any lobby they were in first
     const lobby = this.getLobby(lobbyName);
     if (lobby) {
+      // Leaves any lobby they were in first
       if (this.isInALobby(socket)) {
         this.leaveLobby(socket.data.lobbyName!, socket);
       }
@@ -60,6 +60,14 @@ export class GameServer extends Server<
         socket.join(lobbyName);
         return true;
       }
+    }
+    return false;
+  }
+
+  lobbyHasName(lobbyName: string, nameToAdd: string): boolean {
+    const lobby = this.getLobby(lobbyName);
+    if (lobby) {
+      return lobby.containsName(nameToAdd);
     }
     return false;
   }
@@ -84,7 +92,7 @@ export class GameServer extends Server<
     if (this.isInALobby(socket)) {
       // in a lobby
       const lobby: Lobby = this.lobbies[socket.data.lobbyIndex!];
-      lobby?.removePlayer(socket);
+      lobby.removePlayer(socket);
       socket.leave(this.lobbies[socket.data.lobbyIndex!].name);
       if (lobby.isEmpty()) {
         this.removeLobby(lobby);
@@ -143,11 +151,30 @@ export class GameServer extends Server<
     // All players take a turn
     for (let i = 0; i < ordered.length; i++) {
       const currentPlayer: GameSocket = ordered[i];
-      if (currentPlayer) await this.playTurn(currentPlayer, turnTime);
+      if (currentPlayer && currentPlayer.data.name) {
+        this.to(lobbyName).emit('startTurnAll', currentPlayer.data.name);
+        await this.playTurn(currentPlayer, turnTime);
+      }
     }
     if (settings.clearOnEnd) {
       this.to(lobbyName).emit('clearCanvas');
     }
+    // Guess who is imposter
+    const sockets = await this.in(lobbyName).fetchSockets();
+    const responses: string[] = [];
+    await new Promise<boolean>((resolve, rej) => {
+      sockets.forEach(async (socket) => {
+        socket.emit('guessImposter', (err, res) => {
+          console.log(`err: ${err}`);
+          console.log(`res: ${res}`);
+          console.log(res);
+          responses.push(res.prop);
+          if (responses.length === sockets.length) resolve(true);
+        });
+      });
+    });
+
+    console.log(responses);
     console.log('Game end');
     // Post-game
     this.postGame(lobby);
@@ -169,17 +196,24 @@ export class GameServer extends Server<
   }
 
   readyCheck(lobbyName: string, delay: number): Promise<boolean> {
-    return new Promise<boolean>((res, rej) => {
+    return new Promise<boolean>(async (res, rej) => {
+      const numSockets = (await this.in(lobbyName).fetchSockets()).length;
+      let numResponses = 0;
+
       this.to(lobbyName)
         .timeout(delay)
         .emit('readyCheck', (err: Error | null, responses: 'ok') => {
           if (err) {
-            console.error(`Some players failed the ready check`);
+            console.error(`A player failed the ready check`);
             rej('Player(s) failed the ready check');
           } else {
             console.log(responses);
-            console.log(`All players are ready!`);
-            res(true);
+            numResponses++;
+
+            if (numResponses === numSockets) {
+              console.log(`All players are ready!`);
+              res(true);
+            }
           }
         });
     });

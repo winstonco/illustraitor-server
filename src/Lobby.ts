@@ -41,6 +41,10 @@ export default class Lobby {
     return this._sockets.some((_socket) => _socket.id === socket.id);
   }
 
+  containsName(name: string): boolean {
+    return this._sockets.some((_socket) => _socket.data.name === name);
+  }
+
   isFull(): boolean {
     return this._size === this._max;
   }

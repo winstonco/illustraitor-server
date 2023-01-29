@@ -9,23 +9,33 @@ interface ServerToClientEvents extends IGlobalGameEvents {
   readyCheck: (callback: (err: Error | null, responses: 'ok') => void) => void;
   role: (role: GameRole) => void;
   prompt: (prompt: string) => void;
+  startTurnAll: (currentPlayerName: string) => void;
   startTurn: (turnTime: number) => void;
   endTurn: () => void;
   startGame: () => void;
+  guessImposter: (
+    callback: (err: Error | null, responses: { prop: string }) => void
+  ) => void;
 }
 
+type ResponseType = 'ok' | 'fail';
+
 interface ClientToServerEvents extends IGlobalGameEvents {
-  hello: () => void;
+  namePlayer: (
+    lobbyName: string,
+    name: string,
+    callback: (response: ResponseType) => void
+  ) => void;
   createLobby: (
     lobbyName: string,
-    callback: (response: 'ok' | 'fail') => void,
+    callback: (response: ResponseType) => void,
     lobbySize?: number
   ) => void;
   joinLobby: (
     lobbyName: string,
-    callback: (response: 'ok' | 'fail') => void
+    callback: (response: ResponseType) => void
   ) => void;
-  leaveLobby: (callback: (response: 'ok' | 'fail') => void) => void;
+  leaveLobby: (callback: (response: ResponseType) => void) => void;
   startGame: (lobbyName: string) => void;
 }
 
@@ -41,6 +51,7 @@ interface SocketData {
 }
 
 export {
+  ResponseType,
   ServerToClientEvents,
   ClientToServerEvents,
   InterServerEvents,

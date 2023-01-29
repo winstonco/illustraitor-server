@@ -1,4 +1,5 @@
 import { GameServer } from './GameServer.js';
+import { ResponseType } from './types/SocketIOEvents.js';
 
 // https://stackoverflow.com/questions/23653617/socket-io-listen-events-in-separate-files-in-node-js
 export default function initSocket(io: GameServer) {
@@ -7,7 +8,7 @@ export default function initSocket(io: GameServer) {
 
     const handleCreateLobby = (
       lobbyName: string,
-      callback: (response: 'ok' | 'fail') => void,
+      callback: (response: ResponseType) => void,
       size?: number
     ) => {
       console.log(`Creating lobby ${lobbyName}`);
@@ -23,7 +24,7 @@ export default function initSocket(io: GameServer) {
 
     const handleJoinLobby = (
       lobbyName: string,
-      callback: (response: 'ok' | 'fail') => void
+      callback: (response: ResponseType) => void
     ) => {
       console.log(`Joining lobby ${lobbyName}`);
       if (io.joinLobby(lobbyName, socket)) {
@@ -36,7 +37,20 @@ export default function initSocket(io: GameServer) {
     };
     socket.on('joinLobby', handleJoinLobby);
 
-    const handleLeaveLobby = (callback: (response: 'ok' | 'fail') => void) => {
+    const handleNamePlayer = (
+      lobbyName: string,
+      name: string,
+      callback: (response: ResponseType) => void
+    ) => {
+      if (io.lobbyHasName(lobbyName, name)) {
+        callback('fail');
+      }
+      socket.data.name = name;
+      callback('ok');
+    };
+    socket.on('namePlayer', handleNamePlayer);
+
+    const handleLeaveLobby = (callback: (response: ResponseType) => void) => {
       const lobbyName = socket.data.lobbyName;
       if (lobbyName) {
         console.log(`Leaving lobby ${lobbyName}`);
