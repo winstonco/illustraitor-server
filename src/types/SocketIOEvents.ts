@@ -1,7 +1,5 @@
 // https://socket.io/docs/v4/typescript/
 
-import { Socket } from 'socket.io';
-
 import IGlobalGameEvents from './GlobalGameEvents.js';
 import { GameRole } from './GameRole.js';
 
@@ -61,11 +59,3 @@ export {
   InterServerEvents,
   SocketData,
 };
-
-export interface GameSocket
-  extends Socket<
-    ClientToServerEvents,
-    ServerToClientEvents,
-    InterServerEvents,
-    SocketData
-  > {}

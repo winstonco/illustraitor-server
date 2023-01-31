@@ -2,15 +2,15 @@ import { Server } from 'socket.io';
 
 import {
   ClientToServerEvents,
-  GameSocket,
   InterServerEvents,
   ServerToClientEvents,
   SocketData,
 } from './types/SocketIOEvents.js';
 import Lobby from './Lobby.js';
-import { DrawEvents } from './types/EventNames.js';
 import genPrompt from './utils/genPrompt.js';
 import { settings } from './settings.js';
+import GameSocket from './GameSocket.js';
+import { DrawEvents } from './types/EventNames.js';
 import { DrawEventArgs } from './types/DrawEvents.js';
 
 export class GameServer extends Server<
@@ -46,60 +46,51 @@ export class GameServer extends Server<
   }
 
   joinLobby(lobbyName: string, socket: GameSocket): boolean {
+    console.log(lobbyName);
     const lobby = this.getLobby(lobbyName);
-    if (lobby) {
-      // Leaves any lobby they were in first
-      if (this.isInALobby(socket)) {
-        this.leaveLobby(socket.data.lobbyName!, socket);
-      }
-      if (lobby.addPlayer(socket)) {
-        this.outOfGameSetup(socket);
-        socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
-        socket.data.lobbyName = lobbyName;
-        socket.join(lobbyName);
-        return true;
-      }
+    console.log(lobby);
+    // Leaves any lobby they were in first
+    if (socket.data.lobbyName) this.leaveLobby(socket.data.lobbyName, socket);
+    if (lobby?.addPlayer(socket)) {
+      this.outOfGameSetup(socket);
+      socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
+      socket.data.lobbyName = lobbyName;
+      socket.join(lobbyName);
+      return true;
     }
     return false;
   }
 
   lobbyHasName(lobbyName: string, nameToAdd: string): boolean {
     const lobby = this.getLobby(lobbyName);
-    if (lobby) {
-      return lobby.containsName(nameToAdd);
-    }
+    if (lobby) return lobby.containsName(nameToAdd);
     return false;
   }
 
   leaveLobby(lobbyName: string, socket: GameSocket): boolean {
     const lobby = this.getLobby(lobbyName);
-    if (lobby?.contains(socket)) {
-      lobby.removePlayer(socket);
-      socket.leave(lobby.name);
-      if (lobby.isEmpty()) {
-        this.removeLobby(lobby);
-      }
-      socket.data.lobbyIndex = undefined;
-      socket.data.lobbyName = undefined;
-      this.updateDrawEvents(socket);
-      return true;
-    }
-    return false;
+    if (!lobby) return false;
+    if (!lobby.contains(socket)) return false;
+    lobby.removePlayer(socket);
+    socket.leave(lobby.name);
+    if (lobby.isEmpty()) this.removeLobby(lobby);
+    socket.data.lobbyIndex = undefined;
+    socket.data.lobbyName = undefined;
+    this.updateDrawEvents(socket);
+    return true;
   }
 
-  leaveAll(socket: GameSocket): boolean {
-    if (this.isInALobby(socket)) {
-      // in a lobby
-      const lobby: Lobby = this.lobbies[socket.data.lobbyIndex!];
+  leaveAll(socket: GameSocket) {
+    if (socket.data.lobbyIndex && this.lobbies[socket.data.lobbyIndex]) {
+      const lobby = this.lobbies[socket.data.lobbyIndex];
       lobby.removePlayer(socket);
-      socket.leave(this.lobbies[socket.data.lobbyIndex!].name);
+      socket.leave(this.lobbies[socket.data.lobbyIndex].name);
       if (lobby.isEmpty()) {
         this.removeLobby(lobby);
       }
       socket.data.lobbyIndex = undefined;
       socket.data.lobbyName = undefined;
     }
-    return true;
   }
 
   private outOfGameSetup(socket: GameSocket) {
@@ -134,12 +125,12 @@ export class GameServer extends Server<
     const prompt: string = genPrompt();
     console.log(prompt);
     // Randomly select an imposter artist
-    const imposter: string = lobby.pickOne().id;
+    const imposter: string = lobby.pickOneRandom().id;
     this.to(lobbyName).except(imposter).emit('role', 'real');
     this.to(imposter).emit('role', 'imposter');
     console.log('Roles sent');
     // Randomly generate turn order
-    let ordered: GameSocket[] = lobby.genOrdered();
+    let ordered: GameSocket[] = lobby.genRandomOrdered();
     // Send prompt
     this.to(lobbyName).except(imposter).emit('prompt', prompt);
     this.to(imposter).emit(
@@ -161,7 +152,7 @@ export class GameServer extends Server<
     // Guess who is imposter
     const sockets = this.getLobby(lobbyName)?.sockets;
     const responses: string[] = [];
-    await new Promise<boolean>((resolve, rej) => {
+    await new Promise<boolean>((resolve) => {
       sockets?.forEach(async (socket) => {
         socket.emit('guessImposter', settings.timeToGuess, (err, res) => {
           responses.push(res.guess);
@@ -220,7 +211,7 @@ export class GameServer extends Server<
     this.leaveAll(socket);
   }
 
-  updateDrawEvents(socket: GameSocket): void {
+  updateDrawEvents(socket: GameSocket) {
     DrawEvents.forEach((ev: DrawEvents) => {
       socket.removeAllListeners(ev);
       socket.on(ev, (...args: DrawEventArgs) => {
@@ -232,10 +223,10 @@ export class GameServer extends Server<
     });
   }
 
-  isInALobby(socket: GameSocket): boolean {
-    return socket.data.lobbyIndex !== undefined;
-  }
-
+  /**
+   * @param lobbyName The name of the lobby to find
+   * @returns true if a lobby with that name is found.
+   */
   private getLobby(lobbyName: string) {
     return this.lobbies.find((lobby) => lobby.name === lobbyName);
   }
