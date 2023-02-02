@@ -8,10 +8,11 @@ import {
 } from './types/SocketIOEvents.js';
 import Lobby from './Lobby.js';
 import genPrompt from './utils/genPrompt.js';
-import { settings } from './settings.js';
+import { settings } from './envVars.js';
 import GameSocket from './GameSocket.js';
 import { DrawEvents } from './types/EventNames.js';
 import { DrawEventArgs } from './types/DrawEvents.js';
+import traceLog from './utils/traceLog.js';
 
 export class GameServer extends Server<
   ClientToServerEvents,
@@ -27,6 +28,7 @@ export class GameServer extends Server<
   }
 
   removeLobby(lobby: Lobby): boolean {
+    traceLog(2, `GameServer.ts:31 -- removeLobby(${lobby.name})`);
     if (this.lobbies.includes(lobby)) {
       this.lobbies = this.lobbies.filter((l) => {
         return l !== lobby;
@@ -37,18 +39,17 @@ export class GameServer extends Server<
   }
 
   createLobby(lobbyName: string, socket: GameSocket, size?: number): boolean {
+    traceLog(2, `GameServer.ts:42 -- createLobby(${lobbyName}, ...)`);
     if (this.getLobby(lobbyName) === undefined) {
       this.lobbies.push(new Lobby(lobbyName, size));
-      this.joinLobby(lobbyName, socket);
       return true;
     }
     return false;
   }
 
   joinLobby(lobbyName: string, socket: GameSocket): boolean {
-    console.log(lobbyName);
+    traceLog(2, `GameServer.ts:51 -- joinLobby(${lobbyName}, ...)`);
     const lobby = this.getLobby(lobbyName);
-    console.log(lobby);
     // Leaves any lobby they were in first
     if (socket.data.lobbyName) this.leaveLobby(socket.data.lobbyName, socket);
     if (lobby?.addPlayer(socket)) {
@@ -68,6 +69,7 @@ export class GameServer extends Server<
   }
 
   leaveLobby(lobbyName: string, socket: GameSocket): boolean {
+    traceLog(2, `GameServer.ts:72 -- leaveLobby(${lobbyName}, ...)`);
     const lobby = this.getLobby(lobbyName);
     if (!lobby) return false;
     if (!lobby.contains(socket)) return false;
@@ -107,10 +109,12 @@ export class GameServer extends Server<
   async startGame(
     lobbyName: string,
     turnTime: number = settings.turnLength
-  ): Promise<void> {
+  ): Promise<boolean> {
+    traceLog(2, `GameServer.ts:113 -- startGame(${lobbyName}, ...)`);
     // Lobby must be defined
     const lobby: Lobby | undefined = this.getLobby(lobbyName);
-    if (lobby === undefined) return;
+    if (lobby === undefined) return false;
+    if (lobby.size < settings.minimumPlayers) return false;
     // Pre-game
     this.preGame(lobby);
     // All players have up to 3 seconds to show connection
@@ -118,17 +122,17 @@ export class GameServer extends Server<
       // handle fail
     }
     this.to(lobbyName).emit('startGame');
-    console.log('Game starting');
+    traceLog(1, 'Game starting');
 
     // While playing:
     // Generate a prompt
     const prompt: string = genPrompt();
-    console.log(prompt);
+    traceLog(1, prompt);
     // Randomly select an imposter artist
     const imposter: string = lobby.pickOneRandom().id;
     this.to(lobbyName).except(imposter).emit('role', 'real');
     this.to(imposter).emit('role', 'imposter');
-    console.log('Roles sent');
+    traceLog(1, 'Roles sent');
     // Randomly generate turn order
     let ordered: GameSocket[] = lobby.genRandomOrdered();
     // Send prompt
@@ -137,7 +141,7 @@ export class GameServer extends Server<
       'prompt',
       "You can't see the prompt. Try to blend in!"
     );
-    console.log('Prompt sent');
+    traceLog(1, 'Prompt sent');
     // All players take a turn
     for (let i = 0; i < ordered.length; i++) {
       const currentPlayer: GameSocket = ordered[i];
@@ -161,23 +165,24 @@ export class GameServer extends Server<
       });
     });
 
-    console.log(responses);
-    console.log('Game end');
+    traceLog(1, responses);
+    traceLog(1, 'Game end');
     this.to(lobbyName).emit('endGame');
     // Post-game
     this.postGame(lobby);
+    return true;
   }
 
   private async playTurn(player: GameSocket, turnTime: number): Promise<void> {
     return new Promise(async (res) => {
-      console.log(`It is player ${player.id}'s turn`);
+      traceLog(1, `It is player ${player.id}'s turn`);
       player.data.canDraw = true;
       this.to(player.id).emit('startTurn', turnTime);
       setTimeout(() => {
         player.data.canDraw = false;
         this.to(player.id).emit('endTurn');
         // Next turn
-        console.log(`Player ${player.id}'s turn ended`);
+        traceLog(1, `Player ${player.id}'s turn ended`);
         res();
       }, turnTime * 1000);
     });
@@ -194,11 +199,14 @@ export class GameServer extends Server<
           .timeout(delay)
           .emit('readyCheck', (err: Error | null, res: { response: 'ok' }) => {
             if (err) {
-              console.error(`A player failed the ready check`);
+              traceLog(
+                1,
+                `Lobby: ${lobbyName} -- A player failed the ready check`
+              );
               reject('Player(s) failed the ready check');
             } else {
               if (++numResponses === numSockets) {
-                console.log(`All players are ready!`);
+                traceLog(1, `Lobby: ${lobbyName} -- All players are ready`);
                 resolve(true);
               }
             }

@@ -1,3 +1,5 @@
+import { PenColors } from './PenColorType';
+
 export default interface IDraw {
   beginDrawing: (id: string, startX: number, startY: number) => void;
   drawTo: (
@@ -5,7 +7,7 @@ export default interface IDraw {
     toX: number,
     toY: number,
     width?: number,
-    color?: string
+    color?: PenColors
   ) => void;
   endDrawing: (id: string) => void;
   clearCanvas: () => void;

@@ -1,5 +1,6 @@
 import GameSocket from './GameSocket.js';
 import RandomPicker from './utils/RandomPicker.js';
+import traceLog from './utils/traceLog.js';
 
 export default class Lobby {
   private _sockets: GameSocket[];
@@ -20,6 +21,7 @@ export default class Lobby {
    * @returns true if socket instance was successfully added.
    */
   addPlayer(socket: GameSocket): boolean {
+    traceLog(2, `Lobby.ts:24 -- Adding player ${socket.id}`);
     if (this.isFull()) return false;
     if (this.contains(socket)) return false;
     this._sockets.push(socket);
@@ -33,6 +35,7 @@ export default class Lobby {
    * @returns true if removal was successful.
    */
   removePlayer(socket: GameSocket): boolean {
+    traceLog(2, `Lobby.ts:38 -- Removing player ${socket.id}`);
     if (!this.contains(socket)) return false;
     this._sockets = this._sockets.filter((_socket) => _socket.id !== socket.id);
     this._size--;
