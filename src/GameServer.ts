@@ -30,8 +30,8 @@ export class GameServer extends Server<
   removeLobby(lobby: Lobby): boolean {
     traceLog(2, `GameServer.ts:31 -- removeLobby(${lobby.name})`);
     if (this.lobbies.includes(lobby)) {
-      this.lobbies = this.lobbies.filter((l) => {
-        return l !== lobby;
+      this.lobbies = this.lobbies.filter((checkLobby) => {
+        return checkLobby !== lobby;
       });
       return true;
     }
@@ -100,9 +100,20 @@ export class GameServer extends Server<
     socket.data.canDraw = settings.outOfGameDrawEnabled;
   }
 
-  private preGame(lobby: Lobby) {}
+  private async preGame(lobby: Lobby) {
+    traceLog(1, 'Pre game');
+    traceLog(2, 'Ready check');
+    // All players have up to 3 seconds to show connection
+    if (!(await this.readyCheck(lobby.name, 3000))) {
+      traceLog(2, 'Failed ready check');
+      // handle fail
+    }
+    traceLog(2, `Players in lobby: ${lobby.playerNames}`);
+    this.to(lobby.name).emit('playersInLobby', lobby.playerNames);
+  }
 
   private postGame(lobby: Lobby) {
+    traceLog(1, 'Post game');
     lobby.sockets.forEach((socket) => this.outOfGameSetup(socket));
   }
 
@@ -117,10 +128,6 @@ export class GameServer extends Server<
     if (lobby.size < settings.minimumPlayers) return false;
     // Pre-game
     this.preGame(lobby);
-    // All players have up to 3 seconds to show connection
-    if (!(await this.readyCheck(lobbyName, 3000))) {
-      // handle fail
-    }
     this.to(lobbyName).emit('startGame');
     traceLog(1, 'Game starting');
 
@@ -129,15 +136,15 @@ export class GameServer extends Server<
     const prompt: string = genPrompt();
     traceLog(1, prompt);
     // Randomly select an imposter artist
-    const imposter: string = lobby.pickOneRandom().id;
-    this.to(lobbyName).except(imposter).emit('role', 'real');
-    this.to(imposter).emit('role', 'imposter');
+    const imposter: GameSocket = lobby.pickOneRandom();
+    this.to(lobbyName).except(imposter.id).emit('role', 'real');
+    this.to(imposter.id).emit('role', 'imposter');
     traceLog(1, 'Roles sent');
     // Randomly generate turn order
     let ordered: GameSocket[] = lobby.genRandomOrdered();
     // Send prompt
-    this.to(lobbyName).except(imposter).emit('prompt', prompt);
-    this.to(imposter).emit(
+    this.to(lobbyName).except(imposter.id).emit('prompt', prompt);
+    this.to(imposter.id).emit(
       'prompt',
       "You can't see the prompt. Try to blend in!"
     );
@@ -155,19 +162,39 @@ export class GameServer extends Server<
     }
     // Guess who is imposter
     const sockets = this.getLobby(lobbyName)?.sockets;
-    const responses: string[] = [];
+    let numResponses = 0;
+    const responseCounts: { [name: string]: number } = {};
     await new Promise<boolean>((resolve) => {
       sockets?.forEach(async (socket) => {
         socket.emit('guessImposter', settings.timeToGuess, (err, res) => {
-          responses.push(res.guess);
-          if (responses.length === sockets.length) resolve(true);
+          console.log(res);
+          if (responseCounts[res.guess]) responseCounts[res.guess]++;
+          else responseCounts[res.guess] = 1;
+          numResponses++;
+          if (numResponses === sockets.length) resolve(true);
         });
       });
     });
 
-    traceLog(1, responses);
+    const majorityVote = Object.entries(responseCounts).reduce(
+      (majority, current) => (current[1] > majority[1] ? current : majority)
+    );
+
+    traceLog(1, responseCounts);
+    traceLog(2, majorityVote);
+    this.to(lobbyName).emit('votingFinished', {
+      name: majorityVote[0],
+      count: majorityVote[1],
+    });
     traceLog(1, 'Game end');
-    this.to(lobbyName).emit('endGame');
+    if (majorityVote[0] === imposter.data.name) {
+      traceLog(1, 'The imposter was found');
+      this.to(lobbyName).emit('endGame', true);
+    } else {
+      traceLog(1, 'The imposter got away');
+      this.to(lobbyName).emit('endGame', false);
+    }
+
     // Post-game
     this.postGame(lobby);
     return true;
@@ -193,7 +220,6 @@ export class GameServer extends Server<
       const sockets = this.getLobby(lobbyName)?.sockets;
       const numSockets = sockets?.length;
       let numResponses = 0;
-
       sockets?.forEach((socket) => {
         socket
           .timeout(delay)
@@ -203,7 +229,7 @@ export class GameServer extends Server<
                 1,
                 `Lobby: ${lobbyName} -- A player failed the ready check`
               );
-              reject('Player(s) failed the ready check');
+              resolve(false);
             } else {
               if (++numResponses === numSockets) {
                 traceLog(1, `Lobby: ${lobbyName} -- All players are ready`);

@@ -100,6 +100,10 @@ export default class Lobby {
     return this._sockets.map((gs) => gs.id);
   }
 
+  get playerNames(): string[] {
+    return this._sockets.map((gs) => gs.data.name ?? gs.id);
+  }
+
   get size(): number {
     return this._size;
   }
