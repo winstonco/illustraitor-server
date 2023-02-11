@@ -1,4 +1,5 @@
 import GameSocket from './GameSocket.js';
+import GameSettings from './types/GameSettings.js';
 import RandomPicker from './utils/RandomPicker.js';
 import traceLog from './utils/traceLog.js';
 
@@ -7,12 +8,18 @@ export default class Lobby {
   private _size: number;
   private _max: number;
   private _name: string;
+  private _settings: GameSettings;
 
-  constructor(lobby_name: string, max_size: number = 8) {
+  constructor(
+    lobby_name: string,
+    max_size: number = 8,
+    settings: GameSettings
+  ) {
     this._name = lobby_name;
     this._sockets = [];
     this._size = 0;
     this._max = max_size;
+    this._settings = settings;
   }
 
   /**
@@ -74,11 +81,32 @@ export default class Lobby {
   }
 
   /**
-   * Randomly picks and returns a socket instance.
-   * @returns a random socket instance from the lobby.
+   * Returns a random array of sockets in the lobby.
+   * @param count The number of sockets to randomly pick.
+   * @returns an array of random sockets.
    */
-  pickOneRandom(): GameSocket {
-    return RandomPicker.pickOne(this._sockets);
+  pickRandom(count = 1): GameSocket[] {
+    return RandomPicker.pickMany(this._sockets, count);
+  }
+
+  /**
+   * Randomly sets imposters.
+   * @param count The number of imposters to randomly pick.
+   */
+  pickImposters(count = 1) {
+    console.log(`count: ${count}`);
+    this.pickRandom(count).forEach((socket) => {
+      socket.data.role = 'imposter';
+    });
+  }
+
+  /**
+   * Resets all socket roles to 'real'.
+   */
+  resetRoles() {
+    this.sockets.forEach((socket) => {
+      socket.data.role = 'real';
+    });
   }
 
   /**
@@ -86,14 +114,22 @@ export default class Lobby {
    * @returns the array of sockets, randomly ordered.
    */
   genRandomOrdered(): GameSocket[] {
-    let ordered: GameSocket[] = this._sockets.sort(() => {
+    const ordered: GameSocket[] = this._sockets.sort(() => {
       return Math.floor(Math.random() * 3) - 1;
     });
     return ordered;
   }
 
+  getSocketByName(name: string): GameSocket | undefined {
+    return this._sockets.find((socket) => socket.data.name === name);
+  }
+
   get sockets(): GameSocket[] {
     return this._sockets;
+  }
+
+  get imposters(): GameSocket[] {
+    return this._sockets.filter((socket) => socket.data.role === 'imposter');
   }
 
   get playerIds(): string[] {
@@ -114,5 +150,9 @@ export default class Lobby {
 
   get host(): GameSocket {
     return this._sockets[0] ?? null;
+  }
+
+  get settings(): GameSettings {
+    return this._settings;
   }
 }

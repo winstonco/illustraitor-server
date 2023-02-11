@@ -1,4 +1,5 @@
 import { GameServer } from './GameServer.js';
+import GameSettings from './types/GameSettings.js';
 import { ResponseType } from './types/SocketIOEvents.js';
 import traceLog from './utils/traceLog.js';
 
@@ -9,11 +10,12 @@ export default function initSocket(io: GameServer) {
 
     const handleCreateLobby = (
       lobbyName: string,
+      settings: GameSettings,
       callback: (response: ResponseType) => void,
       size?: number
     ) => {
       traceLog(1, `Creating lobby ${lobbyName}`);
-      if (io.createLobby(lobbyName, socket, size)) {
+      if (io.createLobby(lobbyName, settings, socket, size)) {
         traceLog(1, `Socket ${socket.id} created lobby ${lobbyName}`);
         callback(true);
       } else {
