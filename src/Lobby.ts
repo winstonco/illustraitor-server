@@ -1,4 +1,4 @@
-import GameSocket from './GameSocket.js';
+import GameSocket from './types/GameSocket.js';
 import GameSettings from './types/GameSettings.js';
 import RandomPicker from './utils/RandomPicker.js';
 import traceLog from './utils/traceLog.js';

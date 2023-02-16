@@ -9,7 +9,7 @@ import {
 import Lobby from './Lobby.js';
 import genPrompt from './utils/genPrompt.js';
 import { serverSettings } from './envVars.js';
-import GameSocket from './GameSocket.js';
+import GameSocket from './types/GameSocket.js';
 import { DrawEvents } from './types/EventNames.js';
 import { DrawEventArgs } from './types/DrawEvents.js';
 import traceLog from './utils/traceLog.js';
@@ -63,6 +63,7 @@ export class GameServer extends Server<
       socket.data.lobbyIndex = this.lobbies.indexOf(lobby);
       socket.data.lobbyName = lobbyName;
       socket.join(lobbyName);
+      this.updateNameList(lobbyName);
       return true;
     }
     return false;
@@ -85,6 +86,7 @@ export class GameServer extends Server<
     socket.data.lobbyIndex = undefined;
     socket.data.lobbyName = undefined;
     this.updateDrawEvents(socket);
+    this.to(lobby.name).emit('playersInLobby', lobby.playerNames);
     return true;
   }
 
@@ -93,6 +95,7 @@ export class GameServer extends Server<
       const lobby = this.lobbies[socket.data.lobbyIndex];
       lobby.removePlayer(socket);
       socket.leave(this.lobbies[socket.data.lobbyIndex].name);
+      this.to(lobby.name).emit('playersInLobby', lobby.playerNames);
       if (lobby.isEmpty()) {
         this.removeLobby(lobby);
       }
@@ -114,8 +117,7 @@ export class GameServer extends Server<
       traceLog(2, 'Failed ready check');
       return false;
     }
-    traceLog(2, `Players in lobby: ${lobby.playerNames}`);
-    this.to(lobby.name).emit('playersInLobby', lobby.playerNames);
+    this.updateNameList(lobby.name);
     lobby.resetRoles();
     return true;
   }
@@ -348,6 +350,12 @@ export class GameServer extends Server<
         }
       });
     });
+  }
+
+  updateNameList(lobbyName: string) {
+    const lobby: Lobby | undefined = this.getLobby(lobbyName);
+    if (lobby === undefined) return;
+    this.to(lobby.name).emit('playersInLobby', lobby.playerNames);
   }
 
   /**

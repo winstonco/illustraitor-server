@@ -28,6 +28,7 @@ interface ServerToClientEvents extends IGlobalGameEvents {
 }
 
 interface ClientToServerEvents extends IGlobalGameEvents {
+  loaded: (lobbyName: string) => void;
   namePlayer: (
     lobbyName: string,
     name: string,

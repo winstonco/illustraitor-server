@@ -8,6 +8,11 @@ export default function initSocket(io: GameServer) {
   io.on('connection', (socket) => {
     traceLog(1, 'connected', socket.id);
 
+    const handleLoaded = (lobbyName: string) => {
+      io.updateNameList(lobbyName);
+    };
+    socket.on('loaded', handleLoaded);
+
     const handleCreateLobby = (
       lobbyName: string,
       settings: GameSettings,
@@ -50,6 +55,7 @@ export default function initSocket(io: GameServer) {
         callback(false);
       }
       socket.data.name = name;
+      io.updateNameList(lobbyName);
       callback(true);
     };
     socket.on('namePlayer', handleNamePlayer);

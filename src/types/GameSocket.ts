@@ -5,7 +5,7 @@ import {
   InterServerEvents,
   ServerToClientEvents,
   SocketData,
-} from './types/SocketIOEvents';
+} from './SocketIOEvents';
 
 export default interface GameSocket
   extends Socket<
