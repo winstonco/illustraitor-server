@@ -137,6 +137,7 @@ export class GameServer extends Server<
       // To imposters
       else if (socket.data.role === 'imposter') {
         this.to(socket.id).emit('role', 'imposter');
+        this.to(socket.id).emit('imposterList', lobby.imposterNames);
       }
     });
     traceLog(1, 'Roles sent');

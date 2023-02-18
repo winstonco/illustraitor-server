@@ -13,6 +13,7 @@ interface ServerToClientEvents extends IGlobalGameEvents {
   playersInLobby: (playerNames: string[]) => void;
   startGame: () => void;
   role: (role: GameRole) => void;
+  imposterList: (imposterList: string[]) => void;
   prompt: (prompt: string) => void;
   startRound: () => void;
   startTurnAll: (currentPlayerName: string) => void;

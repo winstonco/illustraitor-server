@@ -132,6 +132,12 @@ export default class Lobby {
     return this._sockets.filter((socket) => socket.data.role === 'imposter');
   }
 
+  get imposterNames(): string[] {
+    return this._sockets
+      .filter((socket) => socket.data.role === 'imposter')
+      .map((s) => s.data.name!);
+  }
+
   get playerIds(): string[] {
     return this._sockets.map((gs) => gs.id);
   }
