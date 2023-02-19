@@ -85,6 +85,7 @@ export class GameServer extends Server<
     if (lobby.isEmpty()) this.removeLobby(lobby);
     socket.data.lobbyIndex = undefined;
     socket.data.lobbyName = undefined;
+    socket.data.loaded = undefined;
     this.updateDrawEvents(socket);
     this.to(lobby.name).emit('playersInLobby', lobby.playerNames);
     return true;
@@ -101,6 +102,7 @@ export class GameServer extends Server<
       }
       socket.data.lobbyIndex = undefined;
       socket.data.lobbyName = undefined;
+      socket.data.loaded = undefined;
     }
   }
 
@@ -117,8 +119,14 @@ export class GameServer extends Server<
       traceLog(2, 'Failed ready check');
       return false;
     }
+    traceLog(2, 'Check all loaded');
+    if (!lobby.sockets.every((socket) => socket.data.loaded === true)) {
+      return false;
+    }
     this.updateNameList(lobby.name);
     lobby.resetRoles();
+    // Brief pause before game starts
+    await this.pausePhase(0.5);
     return true;
   }
 
@@ -146,7 +154,16 @@ export class GameServer extends Server<
   private sendPrompts(lobby: Lobby) {
     // Generate prompts
     const realPrompt: string = genPrompt();
-    const imposterPrompt = "You can't see the prompt. Try to blend in!";
+    const imposterPrompt = ''.concat(
+      ...realPrompt
+        .split('')
+        .map((char) =>
+          [' ', 'a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U'].includes(char)
+            ? char
+            : '_'
+        )
+    );
+    traceLog(2, realPrompt);
     // Send prompts
     lobby.sockets.forEach((socket) => {
       // To reals
@@ -176,7 +193,7 @@ export class GameServer extends Server<
     });
   }
 
-  private async playDrawPhase(lobby: Lobby) {
+  private async drawPhase(lobby: Lobby) {
     // Randomly generate turn order
     let ordered: GameSocket[] = lobby.genRandomOrdered();
     // All players take a turn
@@ -185,7 +202,12 @@ export class GameServer extends Server<
       const currentPlayer = ordered[i];
       await new Promise<void>(async (res) => {
         if (currentPlayer && currentPlayer.data.name) {
-          this.to(lobby.name).emit('startTurnAll', currentPlayer.data.name);
+          await this.pausePhase(0.5);
+          this.to(lobby.name).emit(
+            'startTurnAll',
+            currentPlayer.data.name,
+            lobby.settings['Turn Length']
+          );
           await this.playTurn(currentPlayer, lobby.settings['Turn Length']);
           res();
         }
@@ -196,7 +218,7 @@ export class GameServer extends Server<
     }
   }
 
-  private async playGuessPhase(lobby: Lobby): Promise<GameSocket | undefined> {
+  private async guessPhase(lobby: Lobby): Promise<GameSocket | undefined> {
     // Guess who is imposter
     const sockets = this.getLobby(lobby.name)?.sockets;
     let numResponses = 0;
@@ -273,9 +295,9 @@ export class GameServer extends Server<
       this.sendPrompts(lobby);
       // Guess phase
       traceLog(1, 'Draw phase');
-      await this.playDrawPhase(lobby);
+      await this.drawPhase(lobby);
       traceLog(1, 'Guess phase');
-      const majVoteSocket = await this.playGuessPhase(lobby);
+      const majVoteSocket = await this.guessPhase(lobby);
       if (majVoteSocket) {
         if (
           lobby.imposters.includes(majVoteSocket) &&

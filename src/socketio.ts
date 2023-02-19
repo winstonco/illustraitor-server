@@ -10,6 +10,7 @@ export default function initSocket(io: GameServer) {
 
     const handleLoaded = (lobbyName: string) => {
       io.updateNameList(lobbyName);
+      socket.data.loaded = true;
     };
     socket.on('loaded', handleLoaded);
 
